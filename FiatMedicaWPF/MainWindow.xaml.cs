@@ -23,9 +23,9 @@ namespace FiatMedicaWPF
             InitializeComponent();
             DataContext = this;
 
-            // Keep current sessions first, then newest first
+            // Keep active sessions first, then newest first
             var view = CollectionViewSource.GetDefaultView(AllSessions);
-            view.SortDescriptions.Add(new SortDescription(nameof(ChatSession.IsCurrent), ListSortDirection.Descending));
+            view.SortDescriptions.Add(new SortDescription(nameof(ChatSession.IsActive), ListSortDirection.Descending));
             view.SortDescriptions.Add(new SortDescription(nameof(ChatSession.StartedAt), ListSortDirection.Descending));
         }
 
@@ -35,7 +35,7 @@ namespace FiatMedicaWPF
             {
                 Id = Guid.NewGuid().ToString(),
                 Title = $"New Session {DateTime.Now:HH:mm}",
-                IsCurrent = true,
+                IsActive = true,
                 StartedAt = DateTime.Now
             };
 
@@ -48,7 +48,7 @@ namespace FiatMedicaWPF
         {
             if (SessionsComboBox.SelectedItem is not ChatSession s) return;
 
-            if (!s.IsCurrent)
+            if (!s.IsActive)
             {
                 MessageBox.Show("Previous sessions are immutable and cannot be reopened.",
                                 "Read-only", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -65,7 +65,7 @@ namespace FiatMedicaWPF
         {
             if (_activeSession is null)
             {
-                MessageBox.Show("Open a current session before uploading PDFs.", "No active session",
+                MessageBox.Show("Open a active session before uploading PDFs.", "No active session",
                                 MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -100,7 +100,7 @@ namespace FiatMedicaWPF
                 return;
             }
 
-            _activeSession.IsCurrent = false;
+            _activeSession.IsActive = false;
             _activeSession.EndedAt = DateTime.Now;
 
             CollectionViewSource.GetDefaultView(AllSessions).Refresh();
@@ -141,7 +141,7 @@ namespace FiatMedicaWPF
         {
             if (_activeSession is null)
             {
-                MessageBox.Show("Open a current session first.", "No active session",
+                MessageBox.Show("Open a active session first.", "No active session",
                                 MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -172,7 +172,7 @@ namespace FiatMedicaWPF
     {
         public string Id { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
-        public bool IsCurrent { get; set; }
+        public bool IsActive { get; set; }
         public DateTime StartedAt { get; set; }
         public DateTime? EndedAt { get; set; }
     }
