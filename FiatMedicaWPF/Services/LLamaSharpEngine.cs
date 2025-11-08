@@ -9,8 +9,9 @@ using System;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using FiatMedica.Services;
 
-namespace FiatMedica.Services;
+namespace FiatMedicaWPF.Services;
 
 public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
 {
