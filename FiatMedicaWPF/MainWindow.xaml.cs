@@ -45,16 +45,6 @@ public partial class MainWindow : Window
         
     }
 
-    private bool isDark = false;
-    private void ThemeToggleButton_Click(object sender, RoutedEventArgs e)
-    {
-        var uri = new Uri(isDark ? "LightTheme.xaml" : "DarkTheme.xaml", UriKind.Relative);
-        var resourceDict = Application.LoadComponent(uri) as ResourceDictionary;
-        Application.Current.Resources.MergedDictionaries.Clear();
-        Application.Current.Resources.MergedDictionaries.Add(resourceDict!);
-        isDark = !isDark;
-    }
-
     private async Task InitializeModelAsync()
     {
         if (_isModelLoading || _llmEngine.IsLoaded) return;
