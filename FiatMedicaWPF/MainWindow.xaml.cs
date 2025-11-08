@@ -1,5 +1,6 @@
 ﻿using FiatMedica.Domain;
 using FiatMedica.Services;
+using FiatMedicaWPF.Services;
 using Microsoft.Win32;
 using System;
 using System.Collections.ObjectModel;
