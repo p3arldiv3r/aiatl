@@ -4,7 +4,11 @@ using LLama.Common;
 using LLama.Sampling;
 using System.Runtime.CompilerServices;
 using System.Threading.Channels;
-using ChatSession = LLama.ChatSession;
+using System.Collections.Generic;
+using System;
+using System.IO;
+using System.Text;
+using System.Threading.Tasks;
 
 namespace FiatMedica.Services;
 
@@ -13,8 +17,10 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
     private readonly LlmSettings _settings;
     private LLamaWeights? _model;
     private LLamaContext? _context;
-    private InteractiveExecutor? _executor;
-    private ChatSession? _session;
+    private StatelessExecutor? _executor;
+
+    // Keep a simple prompt history string (no ChatSession)
+    private StringBuilder _chatHistory = new StringBuilder();
 
     public bool IsLoaded => _model is not null;
 
@@ -36,20 +42,22 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
 
             _model = LLamaWeights.LoadFromFile(mp);
             _context = _model.CreateContext(mp);
-            _executor = new InteractiveExecutor(_context);
-            _session = new ChatSession(_executor);
+            _executor = new StatelessExecutor(_model, mp, null);
 
+            // Initialize history with system prompt
+            _chatHistory.Clear();
             if (!string.IsNullOrWhiteSpace(_settings.SystemPrompt))
-                _session.History.AddMessage(AuthorRole.System, _settings.SystemPrompt);
+            {
+                _chatHistory.Append($"<s>[INST] {_settings.SystemPrompt} [/INST]</s>");
+            }
         }, ct);
     }
 
     public void ResetConversation(string? newSystemPrompt = null)
     {
         EnsureReady();
-        _session = new ChatSession(_executor!);
-        if (!string.IsNullOrWhiteSpace(newSystemPrompt ?? _settings.SystemPrompt))
-            _session.History.AddMessage(AuthorRole.System, newSystemPrompt ?? _settings.SystemPrompt);
+        _chatHistory.Clear();
+        _chatHistory.Append($"<s>[INST] {newSystemPrompt ?? _settings.SystemPrompt} [/INST]</s>");
     }
 
     public async IAsyncEnumerable<string> StreamChatAsync(
@@ -58,14 +66,16 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
     {
         EnsureReady();
 
-        // Channel decouples the async token iterator from async UI consumption
         var channel = Channel.CreateUnbounded<string>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = true
         });
 
-        // Run the async token loop off the UI thread
+        // Turn-based prompt
+        string userPrompt = $"<s>[INST] {userMessage} [/INST]";
+        string fullPrompt = _chatHistory.ToString() + userPrompt;
+
         _ = Task.Run(async () =>
         {
             try
@@ -82,10 +92,55 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
                     MaxTokens = _settings.MaxTokens
                 };
 
-                await foreach (var token in _session!.ChatAsync(new ChatHistory.Message(AuthorRole.User, userMessage), ip).WithCancellation(ct))
+                var buffer = new StringBuilder();
+                int tokenCount = 0;
+                int maxTokenSafety = 2000;
+
+                // Stop markers to prevent looping
+                var stopMarkers = new List<string>
                 {
+                    "\nUser:", "User:", "\nAssistant:", "Assistant:",
+                    "<s>", "[INST]", "[/INST]", "</s>"
+                };
+
+                await foreach (var token in _executor!.InferAsync(fullPrompt, ip).WithCancellation(ct))
+                {
+                    tokenCount++;
+                    buffer.Append(token);
                     channel.Writer.TryWrite(token);
+
+                    // Stop if any stop marker appears
+                    string accumulated = buffer.ToString();
+                    int earliestIndex = int.MaxValue;
+                    bool stop = false;
+
+                    foreach (var marker in stopMarkers)
+                    {
+                        int idx = accumulated.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+                        if (idx >= 0 && idx < earliestIndex)
+                        {
+                            earliestIndex = idx;
+                            stop = true;
+                        }
+                    }
+
+                    if (stop)
+                    {
+                        buffer.Length = earliestIndex; // trim before stop marker
+                        break;
+                    }
+
+                    if (tokenCount >= maxTokenSafety)
+                    {
+                        channel.Writer.TryWrite("\n[stopped: safety token limit reached]\n");
+                        break;
+                    }
                 }
+
+                // Append only clean user + assistant text to history
+                _chatHistory.Append(userPrompt);
+                _chatHistory.Append(buffer.ToString().Trim());
+                _chatHistory.Append("</s>");
             }
             catch (Exception ex)
             {
@@ -102,21 +157,19 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
             while (channel.Reader.TryRead(out var tok))
             {
                 yield return tok;
-                // yield quickly so UI stays snappy
-                await Task.Yield();
+                await Task.Yield(); // keep UI responsive
             }
         }
     }
 
     private void EnsureReady()
     {
-        if (!IsLoaded || _executor is null || _session is null)
+        if (!IsLoaded || _executor is null)
             throw new InvalidOperationException("LlamaSharpEngine not initialized. Call InitializeAsync() first.");
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_session is IDisposable d1) d1.Dispose();
         if (_executor is IDisposable d2) d2.Dispose();
         if (_context is IDisposable d3) d3.Dispose();
         if (_model is IDisposable d4) d4.Dispose();
