@@ -7,182 +7,256 @@
         mc:Ignorable="d"
         Title="FiatMedica" Height="800" Width="1200" MinHeight="600" MinWidth="960">
 
-    <!-- Converter instances (match converter classes in your code-behind) -->
-    <Window.Resources>
-        <BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
-        <local:BoolToTextConverter x:Key="BoolToText"/>
-        <local:BoolToBrushConverter x:Key="BoolToBrush"/>
-        <local:BoolToOpacityConverter x:Key="BoolToOpacity"/>
-    </Window.Resources>
+	<!-- Converter instances (match converter classes in your code-behind) -->
+	<Window.Resources>
+		<BooleanToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
+		<local:BoolToTextConverter x:Key="BoolToText"/>
+		<local:BoolToBrushConverter x:Key="BoolToBrush"/>
+		<local:BoolToOpacityConverter x:Key="BoolToOpacity"/>
 
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="320"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+		<!-- Modern Button Style with Rounded Corners -->
+		<Style x:Key="ModernButton" TargetType="Button">
+			<Setter Property="Background" Value="#FF007ACC"/>
+			<Setter Property="Foreground" Value="White"/>
+			<Setter Property="BorderThickness" Value="0"/>
+			<Setter Property="Padding" Value="16,8"/>
+			<Setter Property="FontWeight" Value="SemiBold"/>
+			<Setter Property="Cursor" Value="Hand"/>
+			<Setter Property="Template">
+				<Setter.Value>
+					<ControlTemplate TargetType="Button">
+						<Border Background="{TemplateBinding Background}"
+                                CornerRadius="6"
+                                Padding="{TemplateBinding Padding}">
+							<ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+						</Border>
+					</ControlTemplate>
+				</Setter.Value>
+			</Setter>
+			<Style.Triggers>
+				<Trigger Property="IsMouseOver" Value="True">
+					<Setter Property="Background" Value="#FF005A9E"/>
+				</Trigger>
+				<Trigger Property="IsPressed" Value="True">
+					<Setter Property="Background" Value="#FF004578"/>
+				</Trigger>
+			</Style.Triggers>
+		</Style>
 
-        <!-- LEFT: Sessions sidebar (like ChatGPT) -->
-        <Border Grid.Column="0" Background="#FFF7F7F7" BorderBrush="#FFE5E5E5" BorderThickness="0,0,1,0">
-            <Grid Margin="12">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+		<!-- Modern TextBox Style with Rounded Corners -->
+		<Style x:Key="ModernTextBox" TargetType="TextBox">
+			<Setter Property="Padding" Value="12,10"/>
+			<Setter Property="BorderBrush" Value="#FFD0D0D0"/>
+			<Setter Property="BorderThickness" Value="1"/>
+			<Setter Property="Background" Value="White"/>
+			<Setter Property="Template">
+				<Setter.Value>
+					<ControlTemplate TargetType="TextBox">
+						<Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+							<ScrollViewer x:Name="PART_ContentHost" />
+						</Border>
+					</ControlTemplate>
+				</Setter.Value>
+			</Setter>
+			<Style.Triggers>
+				<Trigger Property="IsFocused" Value="True">
+					<Setter Property="BorderBrush" Value="#FF007ACC"/>
+					<Setter Property="BorderThickness" Value="2"/>
+				</Trigger>
+			</Style.Triggers>
+		</Style>
+	</Window.Resources>
 
-                <!-- Header -->
-                <Grid Grid.Row="0" Margin="0,0,0,12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="Sessions" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" x:Name="NewSessionButton" Click="NewSession_Click"
-                            Content="New Session" Padding="12,6" Margin="8,0,0,0"/>
-                </Grid>
+	<Grid>
+		<Grid.ColumnDefinitions>
+			<ColumnDefinition Width="320"/>
+			<ColumnDefinition Width="*"/>
+		</Grid.ColumnDefinitions>
 
-                <!-- ChatGPT-style list -->
-                <Grid Grid.Row="1">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                    </Grid.RowDefinitions>
+		<!-- LEFT: Sessions sidebar (like ChatGPT) -->
+		<Border Grid.Column="0" Background="#FFF7F7F7" BorderBrush="#FFE5E5E5" BorderThickness="0,0,1,0">
+			<Grid Margin="12">
+				<Grid.RowDefinitions>
+					<RowDefinition Height="Auto"/>
+					<RowDefinition Height="*"/>
+				</Grid.RowDefinitions>
 
-                    <!-- Hidden ComboBox kept for code-behind compatibility -->
-                    <ComboBox x:Name="SessionsComboBox"
+				<!-- Header -->
+				<Grid Grid.Row="0" Margin="0,0,0,12">
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="*"/>
+						<ColumnDefinition Width="Auto"/>
+					</Grid.ColumnDefinitions>
+					<TextBlock Text="Sessions" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+					<Button Grid.Column="1" x:Name="NewSessionButton" Click="NewSession_Click"
+                            Content="New Session" Style="{StaticResource ModernButton}" Margin="8,0,0,0"/>
+				</Grid>
+
+				<!-- ChatGPT-style list -->
+				<Grid Grid.Row="1">
+					<Grid.RowDefinitions>
+						<RowDefinition Height="*"/>
+					</Grid.RowDefinitions>
+
+					<!-- Hidden ComboBox kept for code-behind compatibility -->
+					<ComboBox x:Name="SessionsComboBox"
                               ItemsSource="{Binding AllSessions}"
                               Visibility="Collapsed" />
 
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ListBox x:Name="SessionsListBox"
+					<ScrollViewer VerticalScrollBarVisibility="Auto">
+						<ListBox x:Name="SessionsListBox"
                                  ItemsSource="{Binding AllSessions}"
                                  SelectedItem="{Binding ElementName=SessionsComboBox, Path=SelectedItem, Mode=TwoWay}"
                                  SelectionChanged="SessionsComboBox_SelectionChanged"
-                                 BorderThickness="0">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate DataType="{x:Type local:ChatSession}">
-                                    <Border Margin="0,4"
-                                            Padding="10"
-                                            CornerRadius="8"
+                                 BorderThickness="0"
+                                 Background="Transparent">
+							<ListBox.ItemTemplate>
+								<DataTemplate DataType="{x:Type local:ChatSession}">
+									<Border Margin="0,4"
+                                            Padding="12"
+                                            CornerRadius="10"
                                             Background="#FFFFFFFF"
                                             BorderBrush="#FFE5E5E5"
                                             BorderThickness="1">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*"/>
-                                                <ColumnDefinition Width="Auto"/>
-                                            </Grid.ColumnDefinitions>
-                                            <StackPanel>
-                                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
-                                                <TextBlock Text="{Binding StartedAt, StringFormat=Started {0:g}}"
+										<Grid>
+											<Grid.ColumnDefinitions>
+												<ColumnDefinition Width="*"/>
+												<ColumnDefinition Width="Auto"/>
+											</Grid.ColumnDefinitions>
+											<StackPanel>
+												<TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+												<TextBlock Text="{Binding StartedAt, StringFormat=Started {0:g}}"
                                                            FontSize="11" Opacity="0.65"/>
-                                            </StackPanel>
-                                            <Border Grid.Column="1"
+											</StackPanel>
+											<Border Grid.Column="1"
                                                     Margin="8,0,0,0"
-                                                    Padding="6,2"
-                                                    CornerRadius="10"
+                                                    Padding="8,4"
+                                                    CornerRadius="12"
                                                     Background="{Binding IsActive, Converter={StaticResource BoolToBrush}, ConverterParameter='#E6F9E6|#F0F0F0'}"
                                                     BorderBrush="#FFDDDDDD" BorderThickness="1"
                                                     VerticalAlignment="Center">
-                                                <TextBlock FontSize="11" Opacity="0.85"
+												<TextBlock FontSize="11" Opacity="0.85"
                                                            Text="{Binding IsActive, Converter={StaticResource BoolToText}, ConverterParameter='Active|Previous'}"/>
-                                            </Border>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
+											</Border>
+										</Grid>
+									</Border>
+								</DataTemplate>
+							</ListBox.ItemTemplate>
 
-                            <!-- Dim and disable previous sessions -->
-                            <ListBox.ItemContainerStyle>
-                                <Style TargetType="ListBoxItem">
-                                    <Setter Property="IsEnabled" Value="{Binding IsActive}"/>
-                                    <Setter Property="Opacity" Value="{Binding IsActive, Converter={StaticResource BoolToOpacity}, ConverterParameter='1|0.6'}"/>
-                                    <Setter Property="Padding" Value="0"/>
-                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                </Style>
-                            </ListBox.ItemContainerStyle>
-                        </ListBox>
-                    </ScrollViewer>
-                </Grid>
-            </Grid>
-        </Border>
+							<!-- Dim and disable previous sessions -->
+							<ListBox.ItemContainerStyle>
+								<Style TargetType="ListBoxItem">
+									<Setter Property="IsEnabled" Value="{Binding IsActive}"/>
+									<Setter Property="Opacity" Value="{Binding IsActive, Converter={StaticResource BoolToOpacity}, ConverterParameter='1|0.6'}"/>
+									<Setter Property="Padding" Value="0"/>
+									<Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+									<Setter Property="Template">
+										<Setter.Value>
+											<ControlTemplate TargetType="ListBoxItem">
+												<Border Background="{TemplateBinding Background}"
+                                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                                        Padding="{TemplateBinding Padding}"
+                                                        CornerRadius="8">
+													<ContentPresenter />
+												</Border>
+											</ControlTemplate>
+										</Setter.Value>
+									</Setter>
+								</Style>
+							</ListBox.ItemContainerStyle>
+						</ListBox>
+					</ScrollViewer>
+				</Grid>
+			</Grid>
+		</Border>
 
-        <!-- RIGHT: Chat area -->
-        <Grid Grid.Column="1">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <!-- Toolbar -->
-                <RowDefinition Height="*"/>
-                <!-- Transcript -->
-                <RowDefinition Height="Auto"/>
-                <!-- Input -->
-            </Grid.RowDefinitions>
+		<!-- RIGHT: Chat area -->
+		<Grid Grid.Column="1">
+			<Grid.RowDefinitions>
+				<RowDefinition Height="Auto"/>
+				<!-- Toolbar -->
+				<RowDefinition Height="*"/>
+				<!-- Transcript -->
+				<RowDefinition Height="Auto"/>
+				<!-- Input -->
+			</Grid.RowDefinitions>
 
-            <!-- Toolbar -->
-            <Border Background="#FFF5F5F5" Padding="12" BorderBrush="#FFE5E5E5" BorderThickness="0,0,0,1">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="ChatTitleText" Text="(No session open)"
+			<!-- Toolbar -->
+			<Border Background="#FFF5F5F5" Padding="16" BorderBrush="#FFE5E5E5" BorderThickness="0,0,0,1">
+				<Grid>
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="*"/>
+						<ColumnDefinition Width="Auto"/>
+						<ColumnDefinition Width="Auto"/>
+					</Grid.ColumnDefinitions>
+					<TextBlock x:Name="ChatTitleText" Text="(No session open)"
                                FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    <Button Grid.Column="1" x:Name="UploadPdfButton" Content="Upload PDF(s)…" Margin="8,0,0,0" Padding="12,6"
+					<Button Grid.Column="1" x:Name="UploadPdfButton" Content="Upload PDF(s)…" Margin="8,0,0,0"
+                            Style="{StaticResource ModernButton}"
                             Click="UploadPdfs_Click"/>
-                    <Button Grid.Column="2" x:Name="EndChatButton" Content="End Chat" Margin="8,0,0,0" Padding="12,6"
+					<Button Grid.Column="2" x:Name="EndChatButton" Content="End Chat" Margin="8,0,0,0"
+                            Style="{StaticResource ModernButton}"
                             Click="EndChat_Click"/>
-                </Grid>
-            </Border>
+				</Grid>
+			</Border>
 
-            <!-- Transcript -->
-            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="12">
-                <ItemsControl x:Name="ChatItemsControl" ItemsSource="{Binding ChatMessages}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
+			<!-- Transcript -->
+			<ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="16">
+				<ItemsControl x:Name="ChatItemsControl" ItemsSource="{Binding ChatMessages}">
+					<ItemsControl.ItemsPanel>
+						<ItemsPanelTemplate>
+							<StackPanel/>
+						</ItemsPanelTemplate>
+					</ItemsControl.ItemsPanel>
 
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="{x:Type local:ChatMessage}">
-                            <Border x:Name="Bubble"
-                                    Margin="0,6"
-                                    Padding="12"
+					<ItemsControl.ItemTemplate>
+						<DataTemplate DataType="{x:Type local:ChatMessage}">
+							<Border x:Name="Bubble"
+                                    Margin="0,8"
+                                    Padding="14"
                                     MaxWidth="700"
-                                    CornerRadius="8"
+                                    CornerRadius="16"
                                     Background="#FFF0F0F0"
                                     HorizontalAlignment="Left">
-                                <StackPanel>
-                                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
-                                    <TextBlock Text="{Binding Timestamp, StringFormat={}{0:T}}"
-                                               FontSize="10" Opacity="0.6" HorizontalAlignment="Right"/>
-                                </StackPanel>
-                            </Border>
-                            <DataTemplate.Triggers>
-                                <DataTrigger Binding="{Binding IsUser}" Value="True">
-                                    <Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right"/>
-                                    <Setter TargetName="Bubble" Property="Background" Value="#FFDFF7FF"/>
-                                </DataTrigger>
-                            </DataTemplate.Triggers>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+								<StackPanel>
+									<TextBlock Text="{Binding Text}" TextWrapping="Wrap" LineHeight="22"/>
+									<TextBlock Text="{Binding Timestamp, StringFormat={}{0:T}}"
+                                               FontSize="10" Opacity="0.6" HorizontalAlignment="Right" Margin="0,6,0,0"/>
+								</StackPanel>
+							</Border>
+							<DataTemplate.Triggers>
+								<DataTrigger Binding="{Binding IsUser}" Value="True">
+									<Setter TargetName="Bubble" Property="HorizontalAlignment" Value="Right"/>
+									<Setter TargetName="Bubble" Property="Background" Value="#FFDFF7FF"/>
+								</DataTrigger>
+							</DataTemplate.Triggers>
+						</DataTemplate>
+					</ItemsControl.ItemTemplate>
+				</ItemsControl>
+			</ScrollViewer>
 
-            <!-- Input row -->
-            <Border Grid.Row="2" Background="#FFFFFFFF" Padding="10" BorderBrush="#FFE5E5E5" BorderThickness="0,1,0,0">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBox x:Name="ChatInputTextBox"
-                             MinHeight="44" AcceptsReturn="True" TextWrapping="Wrap"
+			<!-- Input row -->
+			<Border Grid.Row="2" Background="#FFFFFFFF" Padding="16" BorderBrush="#FFE5E5E5" BorderThickness="0,1,0,0">
+				<Grid>
+					<Grid.ColumnDefinitions>
+						<ColumnDefinition Width="*"/>
+						<ColumnDefinition Width="Auto"/>
+					</Grid.ColumnDefinitions>
+					<TextBox x:Name="ChatInputTextBox"
+                             MinHeight="48" AcceptsReturn="True" TextWrapping="Wrap"
                              KeyDown="ChatInputTextBox_KeyDown"
+                             Style="{StaticResource ModernTextBox}"
                              VerticalContentAlignment="Center"/>
-                    <Button Grid.Column="1" x:Name="SendButton" Content="Send" Margin="8,0,0,0" Padding="16,10"
+					<Button Grid.Column="1" x:Name="SendButton" Content="Send" Margin="12,0,0,0"
+                            Style="{StaticResource ModernButton}"
                             Click="SendMessage_Click"/>
-                </Grid>
-            </Border>
-        </Grid>
-    </Grid>
+				</Grid>
+			</Border>
+		</Grid>
+	</Grid>
 </Window>
