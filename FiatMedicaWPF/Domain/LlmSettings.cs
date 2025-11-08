@@ -2,7 +2,7 @@
 
 public sealed class LlmSettings
 {
-    public string ModelPath { get; init; } = @"C:\Users\Micha\Downloads\BioMistral-7B.Q3_K_M.gguf";
+    public string ModelPath { get; init; } = $"{Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)}\\BioMistral-7B.Q3_K_M.gguf";
     public uint ContextSize { get; init; } = 4096;
     public int GpuLayerCount { get; init; } = 20; // 0 = CPU only; tune for your VRAM
     public float Temperature { get; init; } = 0.2f;
