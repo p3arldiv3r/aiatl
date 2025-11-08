@@ -13,7 +13,7 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
     private readonly LlmSettings _settings;
     private LLamaWeights? _model;
     private LLamaContext? _context;
-    private InstructExecutor? _executor;
+    private InteractiveExecutor? _executor;
     private ChatSession? _session;
 
     public bool IsLoaded => _model is not null;
@@ -36,7 +36,7 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
 
             _model = LLamaWeights.LoadFromFile(mp);
             _context = _model.CreateContext(mp);
-            _executor = new InstructExecutor(_context);
+            _executor = new InteractiveExecutor(_context);
             _session = new ChatSession(_executor);
 
             if (!string.IsNullOrWhiteSpace(_settings.SystemPrompt))
