@@ -5,6 +5,8 @@ VisualStudioVersion = 17.14.36623.8 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FiatMedica", "FiatMedica\FiatMedica.csproj", "{E4468AEF-4630-4D9C-80BD-DE5752F5A2D6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FiatMedicaWPF", "FiatMedicaWPF\FiatMedicaWPF.csproj", "{977EF084-BCA5-433E-BE6D-5DE7EBF01EC0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{E4468AEF-4630-4D9C-80BD-DE5752F5A2D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E4468AEF-4630-4D9C-80BD-DE5752F5A2D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E4468AEF-4630-4D9C-80BD-DE5752F5A2D6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{977EF084-BCA5-433E-BE6D-5DE7EBF01EC0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{977EF084-BCA5-433E-BE6D-5DE7EBF01EC0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{977EF084-BCA5-433E-BE6D-5DE7EBF01EC0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{977EF084-BCA5-433E-BE6D-5DE7EBF01EC0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
