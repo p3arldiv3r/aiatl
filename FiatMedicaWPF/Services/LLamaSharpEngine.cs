@@ -94,7 +94,7 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
 
                 var buffer = new StringBuilder();
                 int tokenCount = 0;
-                int maxTokenSafety = 2000;
+                int maxTokenSafety = 8000;
 
                 // Stop markers to prevent looping
                 var stopMarkers = new List<string>
