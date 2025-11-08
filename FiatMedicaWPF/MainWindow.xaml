@@ -79,11 +79,11 @@
                                                     Margin="8,0,0,0"
                                                     Padding="6,2"
                                                     CornerRadius="10"
-                                                    Background="{Binding IsCurrent, Converter={StaticResource BoolToBrush}, ConverterParameter='#E6F9E6|#F0F0F0'}"
+                                                    Background="{Binding IsActive, Converter={StaticResource BoolToBrush}, ConverterParameter='#E6F9E6|#F0F0F0'}"
                                                     BorderBrush="#FFDDDDDD" BorderThickness="1"
                                                     VerticalAlignment="Center">
                                                 <TextBlock FontSize="11" Opacity="0.85"
-                                                           Text="{Binding IsCurrent, Converter={StaticResource BoolToText}, ConverterParameter='Current|Previous'}"/>
+                                                           Text="{Binding IsActive, Converter={StaticResource BoolToText}, ConverterParameter='Active|Previous'}"/>
                                             </Border>
                                         </Grid>
                                     </Border>
@@ -93,8 +93,8 @@
                             <!-- Dim and disable previous sessions -->
                             <ListBox.ItemContainerStyle>
                                 <Style TargetType="ListBoxItem">
-                                    <Setter Property="IsEnabled" Value="{Binding IsCurrent}"/>
-                                    <Setter Property="Opacity" Value="{Binding IsCurrent, Converter={StaticResource BoolToOpacity}, ConverterParameter='1|0.6'}"/>
+                                    <Setter Property="IsEnabled" Value="{Binding IsActive}"/>
+                                    <Setter Property="Opacity" Value="{Binding IsActive, Converter={StaticResource BoolToOpacity}, ConverterParameter='1|0.6'}"/>
                                     <Setter Property="Padding" Value="0"/>
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                                 </Style>
