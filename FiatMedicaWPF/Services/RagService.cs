@@ -318,13 +318,11 @@ public sealed class RagService : IRagService, IAsyncDisposable
             return string.Empty;
 
         var sb = new StringBuilder();
-        sb.AppendLine("=== RETRIEVED CONTEXT ===");
+        sb.AppendLine("User Context: ");
 
         foreach (var doc in documents)
         {
-            sb.AppendLine($"\n[Source: {doc.Source} ({doc.Type})]");
             sb.AppendLine(doc.Content);
-            sb.AppendLine("---");
         }
 
         return sb.ToString();
