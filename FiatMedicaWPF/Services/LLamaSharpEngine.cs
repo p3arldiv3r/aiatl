@@ -18,7 +18,7 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
     private readonly LlmSettings _settings;
     private LLamaWeights? _model;
     private LLamaContext? _context;
-    private StatelessExecutor? _executor;
+    private InteractiveExecutor? _executor;
 
     // Keep a simple prompt history string (no ChatSession)
     private StringBuilder _chatHistory = new StringBuilder();
@@ -43,7 +43,7 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
 
             _model = LLamaWeights.LoadFromFile(mp);
             _context = _model.CreateContext(mp);
-            _executor = new StatelessExecutor(_model, mp, null);
+            _executor = new InteractiveExecutor(_context);
 
             // Initialize history with system prompt
             _chatHistory.Clear();
@@ -90,19 +90,20 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
                         TopK = _settings.TopK,
                         RepeatPenalty = _settings.RepeatPenalty
                     },
-                    MaxTokens = _settings.MaxTokens
+                    MaxTokens = _settings.MaxTokens,
+                    // Only use anti-prompts that indicate a NEW turn, not part of the current prompt
+                    AntiPrompts = new List<string>
+                    {
+                        "</s>",
+                        "<s>[INST]",  // New user turn starting
+                        "\n[INST]",   // Alternative new turn format
+                        "User:",
+                        "\nUser:"
+                    }
                 };
 
                 var buffer = new StringBuilder();
                 int tokenCount = 0;
-                int maxTokenSafety = 8000;
-
-                // Stop markers to prevent looping
-                var stopMarkers = new List<string>
-                {
-                    "\nUser:", "User:", "\nAssistant:", "Assistant:",
-                    "<s>", "[INST]", "[/INST]", "</s>"
-                };
 
                 await foreach (var token in _executor!.InferAsync(fullPrompt, ip).WithCancellation(ct))
                 {
@@ -110,30 +111,31 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
                     buffer.Append(token);
                     channel.Writer.TryWrite(token);
 
-                    // Stop if any stop marker appears
-                    string accumulated = buffer.ToString();
-                    int earliestIndex = int.MaxValue;
-                    bool stop = false;
-
-                    foreach (var marker in stopMarkers)
+                    // Respect MaxTokens strictly
+                    if (tokenCount >= _settings.MaxTokens)
                     {
-                        int idx = accumulated.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
-                        if (idx >= 0 && idx < earliestIndex)
-                        {
-                            earliestIndex = idx;
-                            stop = true;
-                        }
-                    }
-
-                    if (stop)
-                    {
-                        buffer.Length = earliestIndex; // trim before stop marker
                         break;
                     }
 
-                    if (tokenCount >= maxTokenSafety)
+                    // Check for stop sequences that indicate the model is starting a new turn
+                    string accumulated = buffer.ToString();
+                    if (accumulated.Contains("</s>") ||
+                        accumulated.Contains("<s>[INST]") ||
+                        accumulated.Contains("\n[INST]") ||
+                        accumulated.EndsWith("\nUser:") ||
+                        accumulated.EndsWith("User:"))
                     {
-                        channel.Writer.TryWrite("\n[stopped: safety token limit reached]\n");
+                        // Trim at the stop marker
+                        int endIdx = accumulated.IndexOf("</s>");
+                        if (endIdx < 0) endIdx = accumulated.IndexOf("<s>[INST]");
+                        if (endIdx < 0) endIdx = accumulated.IndexOf("\n[INST]");
+                        if (endIdx < 0) endIdx = accumulated.LastIndexOf("\nUser:");
+                        if (endIdx < 0) endIdx = accumulated.LastIndexOf("User:");
+
+                        if (endIdx >= 0)
+                        {
+                            buffer.Length = endIdx;
+                        }
                         break;
                     }
                 }
@@ -167,6 +169,37 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
     {
         if (!IsLoaded || _executor is null)
             throw new InvalidOperationException("LlamaSharpEngine not initialized. Call InitializeAsync() first.");
+    }
+
+    public async Task<string> SummarizeChatAsync(string chatHistory, CancellationToken ct = default)
+    {
+        EnsureReady();
+
+        var summaryPrompt = $"<s>[INST] Summarize the following conversation in 2-3 concise sentences:\n\n{chatHistory}\n\nSummary: [/INST]";
+
+        var ip = new InferenceParams
+        {
+            SamplingPipeline = new DefaultSamplingPipeline
+            {
+                Temperature = 0.3f,
+                TopP = 0.9f,
+                TopK = 40
+            },
+            MaxTokens = 150,
+            AntiPrompts = new List<string> { "</s>", "<s>[INST]", "\n[INST]" }
+        };
+
+        var summary = new StringBuilder();
+
+        await foreach (var token in _executor!.InferAsync(summaryPrompt, ip).WithCancellation(ct))
+        {
+            summary.Append(token);
+
+            if (summary.ToString().Contains("</s>") || summary.ToString().Contains("<s>[INST]"))
+                break;
+        }
+
+        return summary.ToString().Replace("</s>", "").Replace("<s>", "").Trim();
     }
 
     public async ValueTask DisposeAsync()

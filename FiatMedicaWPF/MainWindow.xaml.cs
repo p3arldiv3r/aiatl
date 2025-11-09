@@ -6,6 +6,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -22,6 +23,7 @@ public partial class MainWindow : Window
 
     private ChatSession? _activeSession;
     private readonly ILlmEngine _llmEngine;
+    private readonly IRagService _ragService;
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _isModelLoading;
     private bool _isGenerating;
@@ -31,39 +33,46 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = this;
 
-        // Initialize the LLM engine with settings
+        // Initialize services
         var settings = new LlmSettings();
+        var ragSettings = new RagSettings();
+        
         _llmEngine = new LlamaSharpEngine(settings);
+        _ragService = new RagService(ragSettings);
 
         // Keep active sessions first, then newest first
         var view = CollectionViewSource.GetDefaultView(AllSessions);
         view.SortDescriptions.Add(new SortDescription(nameof(ChatSession.IsActive), ListSortDirection.Descending));
         view.SortDescriptions.Add(new SortDescription(nameof(ChatSession.StartedAt), ListSortDirection.Descending));
 
-        // Initialize the model on startup
-        _ = InitializeModelAsync();
-        
+        // Initialize models
+        _ = InitializeServicesAsync();
     }
 
-    private async Task InitializeModelAsync()
+    private async Task InitializeServicesAsync()
     {
         if (_isModelLoading || _llmEngine.IsLoaded) return;
 
         _isModelLoading = true;
-        ChatTitleText.Text = "Loading model...";
+        ChatTitleText.Text = "Loading models...";
 
         try
         {
+            // Initialize LLM FIRST, then RAG (sequential to avoid native conflicts)
             await _llmEngine.InitializeAsync();
-            ChatTitleText.Text = "Model loaded - (No session open)";
-            MessageBox.Show("LLM model loaded successfully!", "Ready",
+            ChatTitleText.Text = "LLM loaded, initializing RAG...";
+
+            await _ragService.InitializeAsync();
+
+            ChatTitleText.Text = "Models loaded - (No session open)";
+            MessageBox.Show("LLM and RAG models loaded successfully!", "Ready",
                           MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
             ChatTitleText.Text = "Model failed to load";
-            MessageBox.Show($"Failed to load model: {ex.Message}", "Error",
-                          MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"Failed to load models: {ex.Message}\n\nStack trace:\n{ex.StackTrace}",
+                          "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
         {
@@ -113,11 +122,11 @@ public partial class MainWindow : Window
         OpenSession(s);
     }
 
-    private void UploadPdfs_Click(object sender, RoutedEventArgs e)
+    private async void UploadPdfs_Click(object sender, RoutedEventArgs e)
     {
         if (_activeSession is null)
         {
-            MessageBox.Show("Open a active session before uploading PDFs.", "No active session",
+            MessageBox.Show("Open an active session before uploading PDFs.", "No active session",
                             MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -131,19 +140,42 @@ public partial class MainWindow : Window
 
         if (dlg.ShowDialog() == true)
         {
-            foreach (var f in dlg.FileNames)
+            foreach (var filePath in dlg.FileNames)
             {
+                var fileName = System.IO.Path.GetFileName(filePath);
+                
                 ChatMessages.Add(new ChatMessage
                 {
                     IsUser = false,
-                    Text = $"📎 PDF queued for RAG: {System.IO.Path.GetFileName(f)}",
+                    Text = $"📎 Processing PDF: {fileName}...",
                     Timestamp = DateTime.Now
                 });
+
+                try
+                {
+                    await _ragService.AddPdfDocumentAsync(filePath);
+                    
+                    ChatMessages.Add(new ChatMessage
+                    {
+                        IsUser = false,
+                        Text = $"✅ PDF added to RAG database: {fileName}",
+                        Timestamp = DateTime.Now
+                    });
+                }
+                catch (Exception ex)
+                {
+                    ChatMessages.Add(new ChatMessage
+                    {
+                        IsUser = false,
+                        Text = $"❌ Failed to process {fileName}: {ex.Message}",
+                        Timestamp = DateTime.Now
+                    });
+                }
             }
         }
     }
 
-    private void EndChat_Click(object sender, RoutedEventArgs e)
+    private async void EndChat_Click(object sender, RoutedEventArgs e)
     {
         if (_activeSession is null)
         {
@@ -154,6 +186,45 @@ public partial class MainWindow : Window
 
         // Cancel any ongoing generation
         _cancellationTokenSource?.Cancel();
+
+        try
+        {
+            // Build chat history for summarization
+            var chatHistory = new StringBuilder();
+            foreach (var msg in ChatMessages.Where(m => m.IsUser || !m.Text.Contains("📎")))
+            {
+                chatHistory.AppendLine($"{(msg.IsUser ? "User" : "Assistant")}: {msg.Text}");
+            }
+
+            if (chatHistory.Length > 50) // Only summarize if there's meaningful content
+            {
+                ChatMessages.Add(new ChatMessage
+                {
+                    IsUser = false,
+                    Text = "💾 Summarizing chat session...",
+                    Timestamp = DateTime.Now
+                });
+
+                var summary = await _llmEngine.SummarizeChatAsync(chatHistory.ToString());
+                await _ragService.AddChatSummaryAsync(_activeSession.Id, summary);
+
+                ChatMessages.Add(new ChatMessage
+                {
+                    IsUser = false,
+                    Text = $"✅ Chat summary saved to RAG database",
+                    Timestamp = DateTime.Now
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            ChatMessages.Add(new ChatMessage
+            {
+                IsUser = false,
+                Text = $"⚠️ Failed to save chat summary: {ex.Message}",
+                Timestamp = DateTime.Now
+            });
+        }
 
         _activeSession.IsActive = false;
         _activeSession.EndedAt = DateTime.Now;
@@ -196,7 +267,7 @@ public partial class MainWindow : Window
     {
         if (_activeSession is null)
         {
-            MessageBox.Show("Open a active session first.", "No active session",
+            MessageBox.Show("Open an active session first.", "No active session",
                             MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -218,7 +289,28 @@ public partial class MainWindow : Window
         var text = ChatInputTextBox.Text?.Trim();
         if (string.IsNullOrEmpty(text)) return;
 
-        // Add user message
+        // Retrieve RAG context
+        string ragContext = string.Empty;
+        try
+        {
+            ragContext = await _ragService.RetrieveContextAsync(text, topK: 3);
+        }
+        catch (Exception ex)
+        {
+            ChatMessages.Add(new ChatMessage
+            {
+                IsUser = false,
+                Text = $"⚠️ RAG retrieval warning: {ex.Message}",
+                Timestamp = DateTime.Now
+            });
+        }
+
+        // Augment the user message with RAG context
+        var augmentedMessage = string.IsNullOrWhiteSpace(ragContext)
+            ? text
+            : $"{ragContext}\n\nUser Question: {text}";
+
+        // Add user message (show original, not augmented)
         ChatMessages.Add(new ChatMessage
         {
             IsUser = true,
@@ -247,17 +339,16 @@ public partial class MainWindow : Window
             }
         }, System.Windows.Threading.DispatcherPriority.Background);
 
-        // Stream the response
+        // Stream the response using augmented message
         _isGenerating = true;
         _cancellationTokenSource = new CancellationTokenSource();
 
         try
         {
-            await foreach (var token in _llmEngine.StreamChatAsync(text, _cancellationTokenSource.Token))
+            await foreach (var token in _llmEngine.StreamChatAsync(augmentedMessage, _cancellationTokenSource.Token))
             {
                 assistantMessage.Text += token;
 
-                // Periodically scroll to bottom during generation
                 await Dispatcher.InvokeAsync(() =>
                 {
                     var scrollViewer = FindScrollViewer(ChatItemsControl);
@@ -299,13 +390,16 @@ public partial class MainWindow : Window
     {
         base.OnClosing(e);
 
-        // Cancel any ongoing generation
         _cancellationTokenSource?.Cancel();
 
-        // Dispose the LLM engine
-        if (_llmEngine is IAsyncDisposable asyncDisposable)
+        if (_llmEngine is IAsyncDisposable llmDisposable)
         {
-            await asyncDisposable.DisposeAsync();
+            await llmDisposable.DisposeAsync();
+        }
+
+        if (_ragService is IAsyncDisposable ragDisposable)
+        {
+            await ragDisposable.DisposeAsync();
         }
     }
 }
@@ -322,7 +416,7 @@ public class ChatSession
 public class ChatMessage : INotifyPropertyChanged
 {
     private string _text = string.Empty;
-
+                
     public bool IsUser { get; set; }
 
     public string Text

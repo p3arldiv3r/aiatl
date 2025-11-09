@@ -6,7 +6,7 @@ public sealed class LlmSettings
     public uint ContextSize { get; init; } = 4096;
     public int GpuLayerCount { get; init; } = 20; 
     public float Temperature { get; init; } = 0f;
-    public int MaxTokens { get; init; } = 512;
+    public int MaxTokens { get; init; } = 4096;
     public float TopP { get; init; } = 0.95f;
     public int TopK { get; init; } = 40;
     public float RepeatPenalty { get; init; } = 1.1f;
