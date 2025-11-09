@@ -169,6 +169,36 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
             throw new InvalidOperationException("LlamaSharpEngine not initialized. Call InitializeAsync() first.");
     }
 
+    public async Task<string> SummarizeChatAsync(string chatHistory, CancellationToken ct = default)
+    {
+        EnsureReady();
+
+        var summaryPrompt = $"<s>[INST] Summarize the following conversation in 2-3 concise sentences:\n\n{chatHistory}\n\nSummary: [/INST]";
+
+        var ip = new InferenceParams
+        {
+            SamplingPipeline = new DefaultSamplingPipeline
+            {
+                Temperature = 0.3f,
+                TopP = 0.9f,
+                TopK = 40
+            },
+            MaxTokens = 150
+        };
+
+        var summary = new StringBuilder();
+        
+        await foreach (var token in _executor!.InferAsync(summaryPrompt, ip).WithCancellation(ct))
+        {
+            summary.Append(token);
+            
+            if (summary.ToString().Contains("</s>"))
+                break;
+        }
+
+        return summary.ToString().Replace("</s>", "").Trim();
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (_executor is IDisposable d2) d2.Dispose();
