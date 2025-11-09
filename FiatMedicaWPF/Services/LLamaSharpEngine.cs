@@ -9,9 +9,10 @@ using System;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
-using FiatMedica.Services;
+using UglyToad.PdfPig; // PDF parsing library
+using System.Linq;
 
-namespace FiatMedicaWPF.Services;
+namespace FiatMedica.Services;
 
 public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
 {
@@ -20,13 +21,20 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
     private LLamaContext? _context;
     private StatelessExecutor? _executor;
 
-    // Keep a simple prompt history string (no ChatSession)
+    // --- Keep a simple prompt history ---
     private StringBuilder _chatHistory = new StringBuilder();
+
+    // --- RAG-related fields ---
+    private List<string> _ragChunks = new List<string>();
+    private List<float[]> _ragEmbeddings = new List<float[]>(); // embedding vectors
+    private int _chunkSize = 500; // chars per chunk
+    private int _embeddingDim = 768; // embedding dimension (example)
 
     public bool IsLoaded => _model is not null;
 
     public LlamaSharpEngine(LlmSettings settings) => _settings = settings;
 
+    // ------------------ Initialization ------------------
     public Task InitializeAsync(CancellationToken ct = default)
     {
         if (IsLoaded) return Task.CompletedTask;
@@ -48,12 +56,15 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
             // Initialize history with system prompt
             _chatHistory.Clear();
             if (!string.IsNullOrWhiteSpace(_settings.SystemPrompt))
-            {
                 _chatHistory.Append($"<s>[INST] {_settings.SystemPrompt} [/INST]</s>");
-            }
+
+            // --- Load patient profile for RAG ---
+            LoadPatientProfile(_settings.PatientProfilePath);
+
         }, ct);
     }
 
+    // ------------------ Reset conversation ------------------
     public void ResetConversation(string? newSystemPrompt = null)
     {
         EnsureReady();
@@ -61,6 +72,77 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
         _chatHistory.Append($"<s>[INST] {newSystemPrompt ?? _settings.SystemPrompt} [/INST]</s>");
     }
 
+    // ------------------ Load PDF and vectorize ------------------
+    private void LoadPatientProfile(string pdfPath)
+    {
+        if (!File.Exists(pdfPath))
+            throw new FileNotFoundException($"Patient profile PDF not found: {pdfPath}");
+
+        _ragChunks.Clear();
+        _ragEmbeddings.Clear();
+
+        var sb = new StringBuilder();
+        using var pdf = PdfDocument.Open(pdfPath);
+        foreach (var page in pdf.GetPages())
+        {
+            sb.AppendLine(page.Text);
+        }
+
+        string text = sb.ToString().Replace("\r\n", " ").Replace("\n", " ");
+
+        // Chunk and embed
+        for (int i = 0; i < text.Length; i += _chunkSize)
+        {
+            int len = Math.Min(_chunkSize, text.Length - i);
+            string chunk = text.Substring(i, len);
+            _ragChunks.Add(chunk);
+
+            // --- Embedding ---
+            var vec = EmbedText(chunk);
+            _ragEmbeddings.Add(vec);
+        }
+
+        Console.WriteLine($"📄 Patient profile loaded: {pdfPath} ({_ragChunks.Count} chunks with embeddings)");
+    }
+
+    // ------------------ Simple embedding function ------------------
+    private float[] EmbedText(string text)
+    {
+        // --- Replace this with a real embedding model if available ---
+        // For demonstration: generate a dummy vector
+        var vec = new float[_embeddingDim];
+        for (int i = 0; i < _embeddingDim; i++)
+            vec[i] = (float)((text.GetHashCode() + i) % 1000) / 1000f;
+        return vec;
+    }
+
+    // ------------------ Semantic search ------------------
+    private string RetrieveRelevantContext(string query)
+    {
+        var queryVec = EmbedText(query);
+
+        var similarities = _ragEmbeddings
+            .Select((vec, idx) => new { Index = idx, Score = CosineSimilarity(vec, queryVec) })
+            .OrderByDescending(x => x.Score)
+            .Take(3) // top 3 chunks
+            .Select(x => _ragChunks[x.Index]);
+
+        return string.Join(" ", similarities);
+    }
+
+    private static float CosineSimilarity(float[] a, float[] b)
+    {
+        float dot = 0f, normA = 0f, normB = 0f;
+        for (int i = 0; i < a.Length; i++)
+        {
+            dot += a[i] * b[i];
+            normA += a[i] * a[i];
+            normB += b[i] * b[i];
+        }
+        return dot / ((float)Math.Sqrt(normA) * (float)Math.Sqrt(normB) + 1e-8f);
+    }
+
+    // ------------------ Stream chat with RAG ------------------
     public async IAsyncEnumerable<string> StreamChatAsync(
         string userMessage,
         [EnumeratorCancellation] CancellationToken ct = default)
@@ -73,8 +155,11 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
             SingleWriter = true
         });
 
-        // Turn-based prompt
-        string userPrompt = $"<s>[INST] {userMessage} [/INST]";
+        // --- Retrieve semantic context ---
+        string context = RetrieveRelevantContext(userMessage);
+
+        // Build the prompt including context
+        string userPrompt = $"<s>[INST] {context} {userMessage} [/INST]";
         string fullPrompt = _chatHistory.ToString() + userPrompt;
 
         _ = Task.Run(async () =>
@@ -97,7 +182,7 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
                 int tokenCount = 0;
                 int maxTokenSafety = 8000;
 
-                // Stop markers to prevent looping
+                // Stop markers
                 var stopMarkers = new List<string>
                 {
                     "\nUser:", "User:", "\nAssistant:", "Assistant:",
@@ -127,7 +212,7 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
 
                     if (stop)
                     {
-                        buffer.Length = earliestIndex; // trim before stop marker
+                        buffer.Length = earliestIndex;
                         break;
                     }
 
@@ -158,11 +243,12 @@ public sealed class LlamaSharpEngine : ILlmEngine, IAsyncDisposable
             while (channel.Reader.TryRead(out var tok))
             {
                 yield return tok;
-                await Task.Yield(); // keep UI responsive
+                await Task.Yield();
             }
         }
     }
 
+    // ------------------ Helpers ------------------
     private void EnsureReady()
     {
         if (!IsLoaded || _executor is null)
